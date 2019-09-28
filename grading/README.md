@@ -5,6 +5,7 @@ The AWS Academy Educator Grading Toolkit is developed to provide insight into st
 | Tool | Description |
 |--|--|
 | [awless_dump](./awless_dump) | Wrapper around awless to list common resources in an AWS account | 
+| [sandbox_collection](./sandbox_collection) | PowerShell script to collect all common resources in an AWS Academy Sandbox Account |
 
 ## License Summary
 
