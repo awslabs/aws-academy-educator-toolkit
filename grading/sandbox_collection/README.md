@@ -11,6 +11,7 @@ Launch Powershell.exe, set ExecutionPolicy to Unrestricted for the scope of the 
 
 ### Example
 
+```ps
 C:\Temp\SandboxCollectionTool.ps1
 
 Sandbox Collection Tool - v2
@@ -28,8 +29,11 @@ AWS Powershell access has been granted
 File path has been set to [C:\Temp\Collection24-09-2019.txt]
 ##### Script completed, Please review [C:\Temp\Collection24-09-2019.txt] for collected details.
 ##### Removing stored AWS credentials for RunCollection
+```
 
-Example: Contents of file
+### Example: Contents of generated file
+
+```ps
 ##### VPC List #####
 
 CIDR Block    VPC Owner    VPC Name      VPC State Default VPC VPC ID               
@@ -100,6 +104,7 @@ EC2 Instance ID     EC2 Name           EBS Volume ID         EBS Volume Name    
 i-06dd397a40ccb8991 RunCollection-Test vol-06d6e7af84d8d6e75 RunCollection-Test in-use                         8 gp2              100        False 9/23/2019 3:43:52 PM
 i-0061659474db76b2b RunCollection-Test vol-0fb89a84cfa9b1144 RunCollection-Test in-use                         8 gp2              100        False 9/23/2019 3:43:53 PM
 i-0580b0ebb93326e72 RunCollection-Test vol-0e80c45ad03c8b3c3 RunCollection-Test in-use                         8 gp2              100        False 9/23/2019 3:43:52 PM
+```
 
 ## License Summary
 
