@@ -1,6 +1,6 @@
-## AWS Academy Educator Grading Toolkit
+## AWS Academy Educator Toolkit
 
-The AWS Academy Educator Grading Toolkit is developed to provide insight into student progress through the use of scripts and architecture tools to aid educators in grading student work.
+The AWS Academy Educator Toolkit is developed to provide insight into student progress through the use of scripts and architecture tools to aid educators in grading student work.
 
 | Tool | Description |
 |--|--|
