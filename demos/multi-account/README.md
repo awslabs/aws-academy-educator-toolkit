@@ -1,5 +1,7 @@
 # ACO - Demonstrate multi-account setup using CLI
 
+Create an auditor user and gives them view only-rights in another account. You need to have full IAM rights to two accounts to do this demo.
+
 ## Resources
 
 - [Tutorial: Delegate Access Across AWS Accounts Using IAM Roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html)
@@ -189,6 +191,10 @@ aws s3 ls --profile auditor
 ## Cleanup Source Account
 
 ```bash
+POLICY=$(aws iam list-policies \
+  --query 'Policies[?PolicyName == `assume-view-role`].Arn' \
+  --output text)
+
 aws iam delete-login-profile \
   --user-name auditor
 
