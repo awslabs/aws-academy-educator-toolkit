@@ -1,0 +1,211 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+
+# Step 14 - Improve parameters in console
+
+Description: Writing your first cloudformation template
+
+Metadata: 
+
+  AWS::CloudFormation::Interface: 
+    ParameterGroups:
+      - Label:
+          default: Network
+        Parameters: 
+          - VpcCidr
+      - Label:
+          default: Instance
+        Parameters:
+          - Size
+          - AMI
+          - KeyName
+          - SSHCidr
+    ParameterLabels:
+      VpcCidr:
+        default: VPC CIDR Range
+      Size:
+        default: Instance Size
+      AMI:
+        default: Instance AMI
+      KeyName:
+        default: Key Pair Name
+      SSHCidr:
+        default: Trusted SSH CIDR
+
+Parameters:
+
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(1[6-9]|2[0-8]))$
+
+  AMI:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+    Description: Parameter store path to AMI ID
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+
+  Size:
+    Type: String
+    Default: Micro
+    AllowedValues:
+      - Micro
+      - Small
+      - Large
+
+  SSHCidr:
+    Type: String
+    Default: ""
+    Description: Leave empty for no SSH access, otherwise specify trusted CIDR
+
+Mappings:
+
+  InstanceDetails:
+    Micro:
+      Type: t2.micro
+    Small:
+      Type: t3.small
+    Large:
+      Type: m5.large
+
+Conditions:
+
+# Allow SSH access to the instance
+
+  SSHAccess: !Not [ !Equals [ !Ref SSHCidr, "" ] ]
+
+# Transform:
+
+Resources:
+
+# VPC
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      Tags:
+        - Key: Name
+          Value: !Ref "AWS::StackName"
+
+# Internet Gateway
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Ref "AWS::StackName"
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+# Public Route Table and Default Route
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public"
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+# Public Subnet
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, 20, 8 ]]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join ['-', ["public", !Ref "AWS::StackName", !Select [ 0, !GetAZs ]]]
+      VpcId: !Ref VPC
+
+# Associate Public Route Table with Public Subnet
+
+  PublicSubnetAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+# Security Group
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Traffic to Web ALB
+      GroupName: !Sub "sgrp-${AWS::StackName}"
+      VpcId: !Ref VPC
+
+  HTTPIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt SecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+      Description: External HTTP traffic
+
+  SSHIngress:
+    Condition: SSHAccess
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt SecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      CidrIp: !Ref SSHCidr
+      Description: Trusted SSH Access
+
+# Instance
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !FindInMap [InstanceDetails, !Ref Size, Type]
+      ImageId: !Ref AMI
+      KeyName: !Ref KeyName
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Install Apache Web Server and PHP
+          yum install -y httpd
+          # Add a message to the web server
+          echo "What are you doing Dave?" > /var/www/html/index.html
+          # Turn on web server
+          chkconfig httpd on
+          service httpd start
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-instance"
+
+# Outputs
+
+Outputs:
+
+  PublicIP:
+    Description: Instance Public IP Address
+    Value: !GetAtt Instance.PublicIp
+
+  WebSite:
+    Description: Instance Web Site
+    Value: !Join ['', ["http://", !GetAtt Instance.PublicIp]]

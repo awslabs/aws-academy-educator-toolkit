@@ -1,0 +1,27 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+
+# Step 1 - Create VPC
+
+Description: Writing your first cloudformation template
+
+# Metadata:
+
+# Parameters:
+
+# Mappings:
+
+# Conditions:
+
+# Transform:
+
+Resources:
+
+# VPC
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+
+# Outputs:
