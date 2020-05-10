@@ -1,22 +1,22 @@
-# CloudFormation Demo
+# CloudFormation Lab
 
-In this lab you incrementally create a cloudformation template to launch an EC2 instance in a public subnet. You will then make a number of additional improvements to the template. The goal is you will be more confident with writing your own templates from scratch.
+The goal is to gain confidence with writing your own templates from scratch.
+
+In this lab you incrementally create a cloudformation template to launch an EC2 instance in a public subnet. You will then make a number of additional improvements to the template, including a private subnet. 
+
+![network diagram](./cfn-lab.png)
+
+This lab may make a good addition to any of the associate-level courses when they are introducing CloudFormation to students. It is known to work in both AWS Academy Cloud Operations and AWS Academy Cloud Developing sandpits.
 
 ## Prep
 
-- Start Lab
+If using Cloud9 it will be easier to update the cloudformation stack using the command line and pass the template in as a file. These commands are included below.
 
-If using Cloud9 it will be easier to update the cloudformation stack using the command line and pass the template in as a file. 
-
-Alternatively you can copy your template file with each update to an S3 bucket and update from there using the console.
+Alternatively you can copy your template file with each update to an S3 bucket and update from there using the console:
 
 ```bash
 aws s3 cp template.yaml s3://<BUCKET>
 ```
-
-## Goal
-
-TODO
 
 ## Step 1
 
@@ -33,7 +33,7 @@ The obvious resource to create first is a VPC.
 - For the VPC we need to specify the type `AWS::EC2::VPC`
 - It has a number of parameters. If we look at the parameter descriptions, only the `CidrBlock` is mandatory.
 
-template.yaml:
+Create a file called `template.yaml` in cloud9 and copy and paste this text, making sure you remember to save:
 
 ```yaml
 ---
@@ -156,7 +156,7 @@ Parameters:
 
 Use `!Ref` again to refer to your parameter in the VPC resource.
 
-[Solution](./3-template.yaml)
+[Solution](./solutions/03-template.yaml)
 
 Update the stack with your new template, you should see no change. In fact if you do it in the console you might get an error because there is nothing to update.
 
@@ -171,7 +171,7 @@ Lets start building other resources in our VPC, starting with the internet gatew
 - Strangely you can't specify the VPC for the Internet Gateway, you then also have to attach it
   - <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-vpc-gateway-attachment.html>
 
-[Solution](./4-template.yaml)
+[Solution](./solutions/04-template.yaml)
 
 Update your stack with your change.
 
@@ -188,7 +188,7 @@ The next thing to build for our network is a public route table and route to the
 - Also remember to add a route to the internet
   - <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-route.html>
 
-[Solution](./5-template.yaml)
+[Solution](./solutions/05-template.yaml)
 
 This time when updating the stack, lets watch the progress:
 
@@ -228,7 +228,7 @@ Another way to build strings is to use `!Join`. Here is another way we could gen
 - <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference-join.html>
 - `!Join ['-', ["public", !Ref "AWS::StackName", !Select [ 0, !GetAZs ]]]`
 
-[Solution](./6-template.yaml)
+[Solution](./solutions/06-template.yaml)
 
 Update your stack and check your subnet in the console.
 
@@ -238,7 +238,7 @@ What route table is your subnet associated with? Associate the public route tabl
 
 - <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-subnet-route-table-assoc.html>
 
-[Solution](./07-template.yaml)
+[Solution](./solutions/07-template.yaml)
 
 Update your stack.
 
@@ -252,7 +252,7 @@ Before we can create an instance in our subnet, we will need a security group wi
   - SecurityGroup type in cloudformation includes properties for its name and description. You can also tag the security group.
 - <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-security-group-ingress.html>
 
-[Solution](./08-template.yaml)
+[Solution](./solutions/08-template.yaml)
 
 Update the stack and check the security group in the console.
 
@@ -315,7 +315,7 @@ aws cloudformation update-stack \
     --parameters ParameterKey=KeyName,ParameterValue=vockey
 ```
 
-[Solution](./09-template.yaml)
+[Solution](./solutions/09-template.yaml)
 
 Update your stack and watch the EC2 instance start in console.
 
@@ -329,7 +329,7 @@ At this point in the lab we often instruct students to look in the Vocareum lab 
 
 Output the instance IP address. For bonus points also output the URL for the web server running on the instance.
 
-[Solution](./10-template.yaml)
+[Solution](./solutions/10-template.yaml)
 
 ```bash
 $ aws cloudformation describe-stacks \
@@ -372,7 +372,7 @@ Mappings:
 
 Now instead of hard coding t2.micro, use `!FindinMap` to look up the type of instance based on the size parameter.
 
-[Solution](./11-template.yaml)
+[Solution](./solutions/11-template.yaml)
 
 If you get an error that there is nothing to update that means your change has worked, the map lookup resulted in the same size as the running instance, a `t2.micro`.
 
@@ -392,7 +392,7 @@ We have web access to the instance, but what about SSH? An access key was instal
 - Create a condition so that if the CIDR range is empty, do not add SSH access to the instance
   - <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/conditions-section-structure.html>
 
-[Solution](./12-template.yaml)
+[Solution](./solutions/12-template.yaml)
 
 Update your template passing in your external IPv4 address and confirm you can ssh to the instance.
 
@@ -411,7 +411,7 @@ There are now 5 parameters users can specify. As the list of parameters grow the
 
 Create two `ParameterGroups` and `ParameterLabels` for the parameters in your template.
 
-[Solution](./13-template.yaml)
+[Solution](./solutions/13-template.yaml)
 
 Because this step creates no new resources, complete the next step before testing these changes.
 
@@ -433,7 +433,7 @@ In defining these resources you will find you will need more resources, and you 
 
 For the private subnet, use `!Cidr` again but this time select a different range.
 
-[Solution](./14-template.yaml)
+[Solution](./solutions/14-template.yaml)
 
 ## Step 15
 
@@ -451,7 +451,7 @@ Lets add an EBS volume to the instance, but configure the volume to create a sna
 
 For the size of the volume, extend the map so that different size instances get a different size volume attached. Can you attach the volume without rebuilding the instance?
 
-[Solution](./15-template.yaml)
+[Solution](./solutions/15-template.yaml)
 
 Update your stack to add the volume to your instance.
 
