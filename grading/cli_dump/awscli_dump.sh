@@ -15,12 +15,6 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-# Wrapper around awless to list common resources in an AWS account.
-# See https://github.com/wallix/awless/wiki/Installation.
-#
-# Uses AWS CLI for CloudTrail as this is not supported by awless at this time.
-
-
 COLOR=false
 DEBUG=false
 REGION=ap-southeast-2
