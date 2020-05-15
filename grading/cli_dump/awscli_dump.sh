@@ -21,6 +21,7 @@ REGION=ap-southeast-2
 RUN=true
 VPC=
 VPC_FILTER=
+IGW_FILTER=
 OUTPUT="--output table"
 PAGER=
 prog=`basename $0`
@@ -72,6 +73,7 @@ while getopts "cdhjnpr:tv:y" arg; do
     v)
         VPC=${OPTARG}
         VPC_FILTER="--filter Name=vpc-id,Values=${OPTARG}"
+        IGW_FILTER="--filter Name=attachment.vpc-id,Values=${OPTARG}"
         ;;
     y)
         OUTPUT="--output yaml"
@@ -139,8 +141,8 @@ run aws sts get-caller-identity \
 echo ""
 echo "${HEADER}AWS Region:${NONE}"
 run aws ec2 describe-availability-zones \
-    --output text \
-    --query 'AvailabilityZones[0].{Region:GroupName}'
+    $OUTPUT \
+    --query '{Region:AvailabilityZones[0].{Region:GroupName}}'
 
 # VPCs
 echo ""
@@ -170,16 +172,14 @@ echo "${HEADER}Main Route Table:${NONE}"
 if [ -z "$VPC" ]; then
     ROUTE_FILTER="--filter Name=association.main,Values=true"
     ROUTE_QUERY="RouteTables[*].{RouteTable:RouteTableId,VPC:VpcId}"
-    ROUTE_OUTPUT="$OUTPUT"
 else
     ROUTE_FILTER="${VPC_FILTER} Name=association.main,Values=true"
-    ROUTE_QUERY="RouteTables[*].RouteTableId"
-    ROUTE_OUTPUT="--output text"
+    ROUTE_QUERY="{RouteTable:RouteTables[*].RouteTableId}"
 fi
 
 run aws ec2 describe-route-tables \
     $ROUTE_FILTER \
-    $ROUTE_OUTPUT \
+    $OUTPUT \
     --query "$ROUTE_QUERY"
 
 echo ""
@@ -217,22 +217,43 @@ run aws ec2 describe-network-acls \
     $OUTPUT \
     --query 'NetworkAcls[*].{Subnets:Associations[*].SubnetId,ID:NetworkAclId,Ingress:Entries[?Egress == `false`],Egress:Entries[?Egress == `true`],Name:Tags[?Key == `Name`] | [0].Value}' --output table 
 
+# Gateways
+echo ""
+echo "${HEADER}Internet Gateways:${NONE}"
+
+if [ -z "$VPC" ]; then
+    IGW_QUERY="InternetGateways[*].{ID:InternetGatewayId,VPC:Attachments.VpcId,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
+else
+    IGW_QUERY="InternetGateways[*].{ID:InternetGatewayId,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
+fi
+
+run aws ec2 describe-internet-gateways \
+    $IGW_FILTER \
+    $OUTPUT \
+    --query "$IGW_QUERY"
+
 # Security Groups
 echo ""
 echo "${HEADER}Security Groups:${NONE}"
-always aws ec2 describe-security-groups \
+run aws ec2 describe-security-groups \
     $VPC_FILTER \
     $OUTPUT \
     --query 'SecurityGroups[*].{Name:GroupName,ID:GroupId}'
 
 SGRPS=$(aws ec2 describe-security-groups $VPC_FILTER --query 'SecurityGroups[*].GroupId' --output text)
 
+if [ -z "$VPC" ]; then
+    SGRP_QUERY="SecurityGroups[*].{VPC:VpcId,Name:GroupName,Description:Description,ID:GroupId,Ingress:IpPermissions[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId},Egress:IpPermissionsEgress[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId}}"
+else
+    SGRP_QUERY="SecurityGroups[*].{Name:GroupName,Description:Description,ID:GroupId,Ingress:IpPermissions[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId},Egress:IpPermissionsEgress[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId}}"
+fi
+
 for s in $SGRPS; do
     echo ""
     echo "${HEADER}Security Group $s:${NONE}"
-    always aws ec2 describe-security-groups \
+    run aws ec2 describe-security-groups \
         $OUTPUT \
         --group-ids $s \
-        --query 'SecurityGroups[*].{Name:GroupName,Description:Description,ID:GroupId,Ingress:IpPermissions[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId},Egress:IpPermissionsEgress[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId}}'
+        --query "$SGRP_QUERY"
 done
 
