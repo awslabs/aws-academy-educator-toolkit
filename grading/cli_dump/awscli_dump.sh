@@ -111,14 +111,6 @@ VERBOSE=${YELLOW}
 
 export AWS_PAGER=$PAGER
 
-# If VPC specified check it exists
-if [ ! -z "$VPC" ]; then
-    CHECK_VPC=$(aws ec2 describe-vpcs $VPC_FILTER --query 'Vpcs[*].{ID:VpcId}' --output text)
-    if [ -z "$CHECK_VPC" ]; then
-        echo "Error: VPC ($VPC) does not exist"
-        exit 1
-    fi
-fi
 
 function run() {
     $DEBUG && echo "${VERBOSE}"$@"${NONE}"
@@ -130,12 +122,25 @@ function always() {
     "$@"
 }
 
-# Whoami
+# Whoami and check credentials
 echo ""
 echo "${HEADER}User:${NONE}"
 run aws sts get-caller-identity \
     $OUTPUT \
     --query '{Account:Account, User:Arn}'
+if [[ ! $? ]]; then
+    echo "$0: Credentials may not be valid ($?)"
+    exit 1
+fi
+
+# If VPC specified check it exists
+if [[ ! -z "$VPC" ]]; then
+    CHECK_VPC=$(aws ec2 describe-vpcs $VPC_FILTER --query 'Vpcs[*].{ID:VpcId}' --output text)
+    if [ -z "$CHECK_VPC" ]; then
+        echo "Error: VPC ($VPC) does not exist"
+        exit 1
+    fi
+fi
 
 # Region
 echo ""
@@ -217,7 +222,7 @@ run aws ec2 describe-network-acls \
     $OUTPUT \
     --query 'NetworkAcls[*].{Subnets:Associations[*].SubnetId,ID:NetworkAclId,Ingress:Entries[?Egress == `false`],Egress:Entries[?Egress == `true`],Name:Tags[?Key == `Name`] | [0].Value}' --output table 
 
-# Gateways
+# Internet Gateways
 echo ""
 echo "${HEADER}Internet Gateways:${NONE}"
 
@@ -231,6 +236,21 @@ run aws ec2 describe-internet-gateways \
     $IGW_FILTER \
     $OUTPUT \
     --query "$IGW_QUERY"
+
+# NAT Gateways
+echo ""
+echo "${HEADER}NAT Gateways:${NONE}"
+
+if [ -z "$VPC" ]; then
+    NGW_QUERY="NatGateways[*].{ID:NatGatewayId,VPC:VpcId,Subnet:SubnetId,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
+else
+    NGW_QUERY="NatGateways[*].{ID:NatGatewayId,Subnet:SubnetId,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
+fi
+
+run aws ec2 describe-nat-gateways \
+    $VPC_FILTER \
+    $OUTPUT \
+    --query "$NGW_QUERY"
 
 # Security Groups
 echo ""
@@ -257,3 +277,52 @@ for s in $SGRPS; do
         --query "$SGRP_QUERY"
 done
 
+# Key Pairs
+echo ""
+echo "${HEADER}Key Pairs:${NONE}"
+
+run aws ec2 describe-key-pairs \
+    $OUTPUT \
+    --query 'KeyPairs[*].{ID:KeyPairId,Name:KeyName}'
+
+# Load Balancers
+echo ""
+echo "${HEADER}Classic Load Balancers:${NONE}"
+echo "TODO"
+
+echo ""
+echo "${HEADER}Load Balancers:${NONE}"
+
+if [[ -z "$VPC" ]]; then
+    ELB_SUMMARY="LoadBalancers[*].{Name:LoadBalancerName,Type:Type,Arn:LoadBalancerArn}"
+    ELB_QUERY="LoadBalancers[*].{VPC:VpcId,Scheme:Scheme,Type:Type,SecurityGroups:SecurityGroups,AZs:AvailabilityZones[*].{Zone:ZoneName,Subnet:SubnetId},Name:LoadBalancerName,DNS:DNSName}"
+    ELB_LIST="LoadBalancers[*].LoadBalancerArn"
+else
+    ELB_SUMMARY="LoadBalancers[?VpcId == "'`'$VPC'`'"].{Name:LoadBalancerName,Type:Type,Arn:LoadBalancerArn}"
+    ELB_QUERY="LoadBalancers[*].{Scheme:Scheme,Type:Type,SecurityGroups:SecurityGroups,AZs:AvailabilityZones[*].{Zone:ZoneName,Subnet:SubnetId},Name:LoadBalancerName,DNS:DNSName}"
+    ELB_LIST="LoadBalancers[?VpcId == "'`'$VPC'`'"].LoadBalancerArn"
+fi
+
+always aws elbv2 describe-load-balancers \
+    $OUTPUT \
+    --query "$ELB_SUMMARY"
+
+#run aws elbv2 describe-load-balancers \
+#    $OUTPUT \
+#    --query "$ELB_QUERY"
+
+ELBS=$(aws elbv2 describe-load-balancers --output text --query "$ELB_LIST")
+
+for lb in $ELBS; do
+    echo ""
+    echo "${HEADER}Load Balancers $lb:${NONE}"
+    always aws elbv2 describe-load-balancers \
+    --load-balancer-arn $lb \
+    $OUTPUT \
+    --query "$ELB_QUERY"
+    echo ""
+    always aws elbv2 describe-listeners \
+        --load-balancer-arn $lb \
+        $OUTPUT \
+        --query 'Listeners[*].{Port:Port,Protocol:Protocol,Actions:DefaultActions[*].{Type:Type,TargetGroup:TargetGroupArn}}'
+done
