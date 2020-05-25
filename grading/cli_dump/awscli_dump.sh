@@ -21,6 +21,8 @@ REGION=ap-southeast-2
 RUN=true
 VPC=
 VPC_FILTER=
+VPC_FILTER_ARG="--filter"
+VPC_QUERY="VPC:VpcId,"
 IGW_FILTER=
 OUTPUT="--output table"
 PAGER=
@@ -73,6 +75,8 @@ while getopts "cdhjnpr:tv:y" arg; do
     v)
         VPC=${OPTARG}
         VPC_FILTER="--filter Name=vpc-id,Values=${OPTARG}"
+        VPC_FILTER_ARG="${VPC_FILTER}"
+        VPC_QUERY=""
         IGW_FILTER="--filter Name=attachment.vpc-id,Values=${OPTARG}"
         ;;
     y)
@@ -106,6 +110,7 @@ else
 fi
 
 HEADER=${PURPLE}
+SUB=${BLUE}
 KEY=${AQUA}
 VERBOSE=${YELLOW}
 
@@ -152,20 +157,18 @@ run aws ec2 describe-availability-zones \
 # VPCs
 echo ""
 echo "${HEADER}VPCs:${NONE}"
+
 run aws ec2 describe-vpcs \
     $VPC_FILTER \
     $OUTPUT \
     --query 'Vpcs[*].{ID:VpcId,CIDR:CidrBlock,Default:IsDefault,Name:Tags[?Key == `Name`] | [0].Value}'
 
 # Subnets
-SUBNET_QUERY="Subnets[*].{AZ:AvailabilityZone,CIDR:CidrBlock,MapPublicIP:MapPublicIpOnLaunch"
-if [ -z "$VPC" ]; then
-    SUBNET_QUERY="${SUBNET_QUERY},VPC:VpcId"
-fi
-SUBNET_QUERY="${SUBNET_QUERY},Name:Tags[?Key == "'`Name`'"] | [0].Value}"
-
 echo ""
 echo "${HEADER}Subnets:${NONE}"
+
+SUBNET_QUERY="Subnets[*].{${VPC_QUERY}AZ:AvailabilityZone,CIDR:CidrBlock,MapPublicIP:MapPublicIpOnLaunch,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
+
 run aws ec2 describe-subnets \
     $VPC_FILTER \
     $OUTPUT \
@@ -174,13 +177,9 @@ run aws ec2 describe-subnets \
 # Route Tables
 echo ""
 echo "${HEADER}Main Route Table:${NONE}"
-if [ -z "$VPC" ]; then
-    ROUTE_FILTER="--filter Name=association.main,Values=true"
-    ROUTE_QUERY="RouteTables[*].{RouteTable:RouteTableId,VPC:VpcId}"
-else
-    ROUTE_FILTER="${VPC_FILTER} Name=association.main,Values=true"
-    ROUTE_QUERY="{RouteTable:RouteTables[*].RouteTableId}"
-fi
+
+ROUTE_FILTER="${VPC_FILTER_ARG} Name=association.main,Values=true"
+ROUTE_QUERY="RouteTables[*].{${VPC_QUERY}RouteTable:RouteTableId}"
 
 run aws ec2 describe-route-tables \
     $ROUTE_FILTER \
@@ -189,13 +188,9 @@ run aws ec2 describe-route-tables \
 
 echo ""
 echo "${HEADER}Other Route Tables:${NONE}"
-if [ -z "$VPC" ]; then
-    ROUTE_FILTER="--filter Name=association.main,Values=false"
-    ROUTE_QUERY="RouteTables[*].{RouteTable:RouteTableId,VPC:VpcId,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
-else
-    ROUTE_FILTER="${VPC_FILTER} Name=association.main,Values=false"
-    ROUTE_QUERY="RouteTables[*].{RouteTable:RouteTableId,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
-fi
+
+ROUTE_FILTER="${VPC_FILTER_ARG} Name=association.main,Values=false"
+ROUTE_QUERY="RouteTables[*].{${VPC_QUERY}RouteTable:RouteTableId,VPC:VpcId,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
 
 run aws ec2 describe-route-tables \
     $ROUTE_FILTER \
@@ -207,7 +202,7 @@ echo "${HEADER}Routes:${NONE}"
 ROUTE_TABLES=$(aws ec2 describe-route-tables $VPC_FILTER --query 'RouteTables[*].RouteTableId' --output text)
 for t in $ROUTE_TABLES; do
     echo ""
-    echo "${HEADER}Route Table $t:${NONE}"
+    echo "${SUB}Route Table $t:${NONE}"
     run aws ec2 describe-route-tables \
         $OUTPUT \
         --route-table-ids $t \
@@ -220,7 +215,7 @@ echo "${HEADER}NACLs:${NONE}"
 run aws ec2 describe-network-acls \
     $VPC_FILTER \
     $OUTPUT \
-    --query 'NetworkAcls[*].{Subnets:Associations[*].SubnetId,ID:NetworkAclId,Ingress:Entries[?Egress == `false`],Egress:Entries[?Egress == `true`],Name:Tags[?Key == `Name`] | [0].Value}' --output table 
+    --query 'NetworkAcls[*].{Subnets:Associations[*].SubnetId,ID:NetworkAclId,Ingress:Entries[?Egress == `false`],Egress:Entries[?Egress == `true`],Name:Tags[?Key == `Name`] | [0].Value}'
 
 # Internet Gateways
 echo ""
@@ -241,11 +236,7 @@ run aws ec2 describe-internet-gateways \
 echo ""
 echo "${HEADER}NAT Gateways:${NONE}"
 
-if [ -z "$VPC" ]; then
-    NGW_QUERY="NatGateways[*].{ID:NatGatewayId,VPC:VpcId,Subnet:SubnetId,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
-else
-    NGW_QUERY="NatGateways[*].{ID:NatGatewayId,Subnet:SubnetId,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
-fi
+NGW_QUERY="NatGateways[*].{${VPC_QUERY}ID:NatGatewayId,Subnet:SubnetId,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
 
 run aws ec2 describe-nat-gateways \
     $VPC_FILTER \
@@ -261,16 +252,11 @@ run aws ec2 describe-security-groups \
     --query 'SecurityGroups[*].{Name:GroupName,ID:GroupId}'
 
 SGRPS=$(aws ec2 describe-security-groups $VPC_FILTER --query 'SecurityGroups[*].GroupId' --output text)
-
-if [ -z "$VPC" ]; then
-    SGRP_QUERY="SecurityGroups[*].{VPC:VpcId,Name:GroupName,Description:Description,ID:GroupId,Ingress:IpPermissions[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId},Egress:IpPermissionsEgress[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId}}"
-else
-    SGRP_QUERY="SecurityGroups[*].{Name:GroupName,Description:Description,ID:GroupId,Ingress:IpPermissions[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId},Egress:IpPermissionsEgress[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId}}"
-fi
+SGRP_QUERY="SecurityGroups[*].{${VPC_QUERY}Name:GroupName,Description:Description,ID:GroupId,Ingress:IpPermissions[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId},Egress:IpPermissionsEgress[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId}}"
 
 for s in $SGRPS; do
     echo ""
-    echo "${HEADER}Security Group $s:${NONE}"
+    echo "${SUB}Security Group $s:${NONE}"
     run aws ec2 describe-security-groups \
         $OUTPUT \
         --group-ids $s \
@@ -293,36 +279,50 @@ echo "TODO"
 echo ""
 echo "${HEADER}Load Balancers:${NONE}"
 
+ELB_QUERY="LoadBalancers[*].{${VPC_QUERY}Scheme:Scheme,Type:Type,SecurityGroups:SecurityGroups,AZs:AvailabilityZones[*].{Zone:ZoneName,Subnet:SubnetId},Name:LoadBalancerName,DNS:DNSName}"
+
 if [[ -z "$VPC" ]]; then
-    ELB_SUMMARY="LoadBalancers[*].{Name:LoadBalancerName,Type:Type,Arn:LoadBalancerArn}"
-    ELB_QUERY="LoadBalancers[*].{VPC:VpcId,Scheme:Scheme,Type:Type,SecurityGroups:SecurityGroups,AZs:AvailabilityZones[*].{Zone:ZoneName,Subnet:SubnetId},Name:LoadBalancerName,DNS:DNSName}"
-    ELB_LIST="LoadBalancers[*].LoadBalancerArn"
+    ELB_VPC="*"
 else
-    ELB_SUMMARY="LoadBalancers[?VpcId == "'`'$VPC'`'"].{Name:LoadBalancerName,Type:Type,Arn:LoadBalancerArn}"
-    ELB_QUERY="LoadBalancers[*].{Scheme:Scheme,Type:Type,SecurityGroups:SecurityGroups,AZs:AvailabilityZones[*].{Zone:ZoneName,Subnet:SubnetId},Name:LoadBalancerName,DNS:DNSName}"
-    ELB_LIST="LoadBalancers[?VpcId == "'`'$VPC'`'"].LoadBalancerArn"
+    ELB_VPC="?VpcId == "'`'$VPC'`'
 fi
+
+ELB_SUMMARY="LoadBalancers[${ELB_VPC}].{Name:LoadBalancerName,Type:Type,Arn:LoadBalancerArn}"
+ELB_LIST="LoadBalancers[${ELB_VPC}].LoadBalancerArn"
+TGRP_QUERY="TargetGroups[*].{${VPC_QUERY}Name:TargetGroupName,Protocol:Protocol,Port:Port,Type:TargetType,HealthCheck:{Protocol:HealthCheckProtocol,Path:HealthCheckPath,Enabled:HealthCheckEnabled}}"
 
 always aws elbv2 describe-load-balancers \
     $OUTPUT \
     --query "$ELB_SUMMARY"
 
-#run aws elbv2 describe-load-balancers \
-#    $OUTPUT \
-#    --query "$ELB_QUERY"
-
 ELBS=$(aws elbv2 describe-load-balancers --output text --query "$ELB_LIST")
 
 for lb in $ELBS; do
     echo ""
-    echo "${HEADER}Load Balancers $lb:${NONE}"
+    echo "${HEADER}Load Balancer $lb:${NONE}"
+
     always aws elbv2 describe-load-balancers \
     --load-balancer-arn $lb \
     $OUTPUT \
     --query "$ELB_QUERY"
+
     echo ""
     always aws elbv2 describe-listeners \
         --load-balancer-arn $lb \
         $OUTPUT \
         --query 'Listeners[*].{Port:Port,Protocol:Protocol,Actions:DefaultActions[*].{Type:Type,TargetGroup:TargetGroupArn}}'
+
+    TGRPS=$(aws elbv2 describe-listeners --load-balancer-arn $lb --output text --query Listeners[*].DefaultActions[*].TargetGroupArn)
+
+    for tg in $TGRPS; do
+        echo ""
+        echo "${SUB}Target Group $tg:${NONE}"
+        always aws elbv2 describe-target-groups \
+            --target-group-arn $tg \
+            $OUTPUT \
+            --query "$TGRP_QUERY"
+    done
 done
+
+
+    
