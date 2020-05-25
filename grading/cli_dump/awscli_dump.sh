@@ -110,9 +110,9 @@ else
 fi
 
 HEADER=${PURPLE}
-SUB=${BLUE}
-KEY=${AQUA}
+SUB=${AQUA}
 VERBOSE=${YELLOW}
+TODO=${RED}
 
 export AWS_PAGER=$PAGER
 
@@ -274,7 +274,7 @@ run aws ec2 describe-key-pairs \
 # Load Balancers
 echo ""
 echo "${HEADER}Classic Load Balancers:${NONE}"
-echo "TODO"
+echo "${TODO}TODO${NONE}"
 
 echo ""
 echo "${HEADER}Load Balancers:${NONE}"
