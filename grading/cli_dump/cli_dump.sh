@@ -15,6 +15,8 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+# Wrapper for AWS CLI to collect and dump information regarding common resources in an AWS account
+
 COLOR=false
 DEBUG=false
 REGION=ap-southeast-2
@@ -116,15 +118,21 @@ TODO=${RED}
 
 export AWS_PAGER=$PAGER
 
-
+# Run the command unless in dummy mode, displaying it first if in debug mode
 function run() {
     $DEBUG && echo "${VERBOSE}"$@"${NONE}"
     $RUN && "$@"
 }
 
+# Always run the command, displaying it first if in debug mode
 function always() {
     $DEBUG && echo "${VERBOSE}"$@"${NONE}"
     "$@"
+}
+
+# Run the command unless in dummy mode
+function list() {
+    $RUN && "$@"
 }
 
 # Whoami and check credentials
@@ -140,7 +148,7 @@ fi
 
 # If VPC specified check it exists
 if [[ ! -z "$VPC" ]]; then
-    CHECK_VPC=$(aws ec2 describe-vpcs $VPC_FILTER --query 'Vpcs[*].{ID:VpcId}' --output text)
+    CHECK_VPC=$(list aws ec2 describe-vpcs $VPC_FILTER --query 'Vpcs[*].{ID:VpcId}' --output text)
     if [ -z "$CHECK_VPC" ]; then
         echo "Error: VPC ($VPC) does not exist"
         exit 1
@@ -199,7 +207,7 @@ run aws ec2 describe-route-tables \
 
 echo ""
 echo "${HEADER}Routes:${NONE}"
-ROUTE_TABLES=$(aws ec2 describe-route-tables $VPC_FILTER --query 'RouteTables[*].RouteTableId' --output text)
+ROUTE_TABLES=$(list aws ec2 describe-route-tables $VPC_FILTER --query 'RouteTables[*].RouteTableId' --output text)
 for t in $ROUTE_TABLES; do
     echo ""
     echo "${SUB}Route Table $t:${NONE}"
@@ -251,7 +259,7 @@ run aws ec2 describe-security-groups \
     $OUTPUT \
     --query 'SecurityGroups[*].{Name:GroupName,ID:GroupId}'
 
-SGRPS=$(aws ec2 describe-security-groups $VPC_FILTER --query 'SecurityGroups[*].GroupId' --output text)
+SGRPS=$(list aws ec2 describe-security-groups $VPC_FILTER --query 'SecurityGroups[*].GroupId' --output text)
 SGRP_QUERY="SecurityGroups[*].{${VPC_QUERY}Name:GroupName,Description:Description,ID:GroupId,Ingress:IpPermissions[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId},Egress:IpPermissionsEgress[].{From:FromPort,To:ToPort,Protocol:IpProtocol,CIDR:IpRanges[].CidrIp,Group:UserIdGroupPairs[].GroupId}}"
 
 for s in $SGRPS; do
@@ -273,10 +281,6 @@ run aws ec2 describe-key-pairs \
 
 # Load Balancers
 echo ""
-echo "${HEADER}Classic Load Balancers:${NONE}"
-echo "${TODO}TODO${NONE}"
-
-echo ""
 echo "${HEADER}Load Balancers:${NONE}"
 
 ELB_QUERY="LoadBalancers[*].{${VPC_QUERY}Scheme:Scheme,Type:Type,SecurityGroups:SecurityGroups,AZs:AvailabilityZones[*].{Zone:ZoneName,Subnet:SubnetId},Name:LoadBalancerName,DNS:DNSName}"
@@ -295,39 +299,47 @@ run aws elbv2 describe-load-balancers \
     $OUTPUT \
     --query "$ELB_SUMMARY"
 
-ELBS=$(aws elbv2 describe-load-balancers --output text --query "$ELB_LIST")
+ELBS=$(list aws elbv2 describe-load-balancers --output text --query "$ELB_LIST")
 
 for lb in $ELBS; do
     echo ""
     echo "${HEADER}Load Balancer $lb:${NONE}"
 
-    always aws elbv2 describe-load-balancers \
+    run aws elbv2 describe-load-balancers \
     --load-balancer-arn $lb \
     $OUTPUT \
     --query "$ELB_QUERY"
 
     echo ""
     echo "${SUB}Listeners:${NONE}"
-    always aws elbv2 describe-listeners \
+    run aws elbv2 describe-listeners \
         --load-balancer-arn $lb \
         $OUTPUT \
         --query 'Listeners[*].{Port:Port,Protocol:Protocol,Actions:DefaultActions[*].{Type:Type,TargetGroup:TargetGroupArn}}'
 
-    TGRPS=$(aws elbv2 describe-listeners --load-balancer-arn $lb --output text --query Listeners[*].DefaultActions[*].TargetGroupArn)
+    TGRPS=$(list aws elbv2 describe-listeners --load-balancer-arn $lb --output text --query Listeners[*].DefaultActions[*].TargetGroupArn)
 
     for tg in $TGRPS; do
         echo ""
         echo "${SUB}Target Group $tg:${NONE}"
-        always aws elbv2 describe-target-groups \
+        run aws elbv2 describe-target-groups \
             --target-group-arn $tg \
             $OUTPUT \
             --query "$TGRP_QUERY"
 
         echo ""
         echo "${SUB}Auto Scaling Group:${NONE}"
-        # Assume a single autoscalinggroup per target group
-        always aws autoscaling describe-auto-scaling-groups \
+        # Assume a single target group
+        run aws autoscaling describe-auto-scaling-groups \
             $OUTPUT \
             --query 'AutoScalingGroups[?TargetGroupARNs[0] == `'$tg'`].{Name:AutoScalingGroupName,LaunchConfig:LaunchConfigurationName,Size:{Min:MinSize,Desired:DesiredCapacity,Max:MaxSize},AZs:AvailabilityZones,Instances:Instances[*].{Id:InstanceId,AZ:AvailabilityZone,State:LifecycleState,Health:HealthStatus}}'
     done
 done
+
+# Launch Configs
+echo ""
+echo "${HEADER}Launch Configs:${NONE}"
+
+always aws autoscaling describe-launch-configurations \
+    $OUTPUT \
+    --query 'LaunchConfigurations[*].{Name:LaunchConfigurationName,AMI:ImageId,Key:KeyName,SecGroups:SecurityGroups,Type:InstanceType}'
