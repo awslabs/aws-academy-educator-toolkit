@@ -125,7 +125,8 @@ function run() {
 }
 
 # Always run the command, displaying it first if in debug mode
-function always() {
+# Useful when deubgging this script to avoid running all prior queries
+function always_run() {
     $DEBUG && echo "${VERBOSE}"$@"${NONE}"
     "$@"
 }
@@ -133,6 +134,12 @@ function always() {
 # Run the command unless in dummy mode
 function list() {
     $RUN && "$@"
+}
+
+# Always run the command
+# Useful when deubgging this script to avoid running all prior queries
+function always_list() {
+    "$@"
 }
 
 # Whoami and check credentials
@@ -329,10 +336,9 @@ for lb in $ELBS; do
 
         echo ""
         echo "${SUB}Auto Scaling Group:${NONE}"
-        # Assume a single target group
         run aws autoscaling describe-auto-scaling-groups \
             $OUTPUT \
-            --query 'AutoScalingGroups[?TargetGroupARNs[0] == `'$tg'`].{Name:AutoScalingGroupName,LaunchConfig:LaunchConfigurationName,Size:{Min:MinSize,Desired:DesiredCapacity,Max:MaxSize},AZs:AvailabilityZones,Instances:Instances[*].{Id:InstanceId,AZ:AvailabilityZone,State:LifecycleState,Health:HealthStatus}}'
+            --query 'AutoScalingGroups[?contains(TargetGroupARNs, `'$tg'`)].{Name:AutoScalingGroupName,LaunchConfig:LaunchConfigurationName,Size:{Min:MinSize,Desired:DesiredCapacity,Max:MaxSize},AZs:AvailabilityZones,Instances:Instances[*].{Id:InstanceId,AZ:AvailabilityZone,State:LifecycleState,Health:HealthStatus}}'
     done
 done
 
@@ -340,6 +346,27 @@ done
 echo ""
 echo "${HEADER}Launch Configs:${NONE}"
 
-always aws autoscaling describe-launch-configurations \
+run aws autoscaling describe-launch-configurations \
     $OUTPUT \
     --query 'LaunchConfigurations[*].{Name:LaunchConfigurationName,AMI:ImageId,Key:KeyName,SecGroups:SecurityGroups,Type:InstanceType}'
+
+# Instances
+echo ""
+echo "${HEADER}Instances:${NONE}"
+
+run aws ec2 describe-instances \
+    $VPC_FILTER \
+    $OUTPUT \
+    --query "Reservations[*].Instances[*].{${VPC_QUERY}ID:InstanceId,AMI:ImageId,Type:InstanceType,AZ:Placement.AvailabilityZone,PrivateIP:PrivateIpAddress,Subnet:SubnetId,PublicIP:PublicIpAddress}"
+
+INSTANCES=$(list aws ec2 describe-instances $VPC_FILTER --output text --query 'Reservations[*].Instances[*].InstanceId')
+
+for in in $INSTANCES; do
+    echo ""
+    echo "${SUB}Instance $in:${NONE}"
+
+    run aws ec2 describe-instances \
+        --instance-ids $in \
+        $OUTPUT \
+        --query "Reservations[*].Instances[0].{BlockDevices:BlockDeviceMappings[*].{Device:DeviceName,Attached:Ebs.Status,Volume:Ebs.VolumeId},Network:NetworkInterfaces[*].{SecGroups:Groups[*].GroupId,IP:PrivateIpAddresses[*].{PublicIP:Association.PublicIp,PublicDNS:Association.PublicDnsName,PrivateIP:PrivateIpAddress,Primary:Primary},ID:NetworkInterfaceId}}"
+done
