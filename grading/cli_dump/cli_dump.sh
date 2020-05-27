@@ -25,6 +25,7 @@ VPC=
 VPC_FILTER=
 VPC_FILTER_ARG="--filter"
 VPC_QUERY="VPC:VpcId,"
+VPC_ONLY=false
 IGW_FILTER=
 OUTPUT="--output table"
 PAGER=
@@ -42,13 +43,14 @@ _usage()
     echo "-r region  Specify AWS region"
     echo "-t         Output in text"
     echo "-v vpc     Limit resources to this vpc"
+    echo "-V         List VPCs and terminate"
     echo "-y         Output in YAML(*)"
     echo ""
     echo "(*) Requires AWS CLI v2"
     exit 1
 }
 
-while getopts "cdhjnpr:tv:y" arg; do
+while getopts "cdhjnpr:tv:Vy" arg; do
   case ${arg} in
     c)
         COLOR=true
@@ -80,6 +82,9 @@ while getopts "cdhjnpr:tv:y" arg; do
         VPC_FILTER_ARG="${VPC_FILTER}"
         VPC_QUERY=""
         IGW_FILTER="--filter Name=attachment.vpc-id,Values=${OPTARG}"
+        ;;
+    V)
+        VPC_ONLY=true
         ;;
     y)
         OUTPUT="--output yaml"
@@ -141,6 +146,13 @@ function list() {
 function always_list() {
     "$@"
 }
+
+if $VPC_ONLY; then
+    run aws ec2 describe-vpcs \
+        $OUTPUT \
+        --query 'Vpcs[*].{ID:VpcId,CIDR:CidrBlock,Default:IsDefault,Name:Tags[?Key == `Name`] | [0].Value}'
+    exit 0
+fi
 
 # Whoami and check credentials
 echo ""
