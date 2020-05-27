@@ -291,7 +291,7 @@ ELB_SUMMARY="LoadBalancers[${ELB_VPC}].{Name:LoadBalancerName,Type:Type,Arn:Load
 ELB_LIST="LoadBalancers[${ELB_VPC}].LoadBalancerArn"
 TGRP_QUERY="TargetGroups[*].{${VPC_QUERY}Name:TargetGroupName,Protocol:Protocol,Port:Port,Type:TargetType,HealthCheck:{Protocol:HealthCheckProtocol,Path:HealthCheckPath,Enabled:HealthCheckEnabled}}"
 
-always aws elbv2 describe-load-balancers \
+run aws elbv2 describe-load-balancers \
     $OUTPUT \
     --query "$ELB_SUMMARY"
 
@@ -307,6 +307,7 @@ for lb in $ELBS; do
     --query "$ELB_QUERY"
 
     echo ""
+    echo "${SUB}Listeners:${NONE}"
     always aws elbv2 describe-listeners \
         --load-balancer-arn $lb \
         $OUTPUT \
@@ -321,8 +322,12 @@ for lb in $ELBS; do
             --target-group-arn $tg \
             $OUTPUT \
             --query "$TGRP_QUERY"
+
+        echo ""
+        echo "${SUB}Auto Scaling Group:${NONE}"
+        # Assume a single autoscalinggroup per target group
+        always aws autoscaling describe-auto-scaling-groups \
+            $OUTPUT \
+            --query 'AutoScalingGroups[?TargetGroupARNs[0] == `'$tg'`].{Name:AutoScalingGroupName,LaunchConfig:LaunchConfigurationName,Size:{Min:MinSize,Desired:DesiredCapacity,Max:MaxSize},AZs:AvailabilityZones,Instances:Instances[*].{Id:InstanceId,AZ:AvailabilityZone,State:LifecycleState,Health:HealthStatus}}'
     done
 done
-
-
-    
