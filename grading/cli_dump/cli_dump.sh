@@ -154,11 +154,13 @@ if [[ ! $? ]]; then
 fi
 
 # If VPC specified check it exists
-if [[ ! -z "$VPC" ]]; then
-    CHECK_VPC=$(list aws ec2 describe-vpcs $VPC_FILTER --query 'Vpcs[*].{ID:VpcId}' --output text)
-    if [ -z "$CHECK_VPC" ]; then
-        echo "Error: VPC ($VPC) does not exist"
-        exit 1
+if $RUN; then
+    if [[ ! -z "$VPC" ]]; then
+        CHECK_VPC=$(list aws ec2 describe-vpcs $VPC_FILTER --query 'Vpcs[*].{ID:VpcId}' --output text)
+        if [ -z "$CHECK_VPC" ]; then
+            echo "Error: VPC ($VPC) does not exist"
+            exit 1
+        fi
     fi
 fi
 
@@ -369,4 +371,12 @@ for in in $INSTANCES; do
         --instance-ids $in \
         $OUTPUT \
         --query "Reservations[*].Instances[0].{BlockDevices:BlockDeviceMappings[*].{Device:DeviceName,Attached:Ebs.Status,Volume:Ebs.VolumeId},Network:NetworkInterfaces[*].{SecGroups:Groups[*].GroupId,IP:PrivateIpAddresses[*].{PublicIP:Association.PublicIp,PublicDNS:Association.PublicDnsName,PrivateIP:PrivateIpAddress,Primary:Primary},ID:NetworkInterfaceId}}"
+
+    echo ""
+    echo "${SUB}Volumes attached to instance $in:${NONE}"
+    run aws ec2 describe-volumes \
+        --filters Name=attachment.instance-id,Values=$in \
+        $OUTPUT \
+        --query "Volumes[*].{Id:VolumeId,Encrypted:Encrypted,Size:Size,State:State,IOPS:Iops,Type:VolumeType}"
 done
+
