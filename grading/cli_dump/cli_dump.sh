@@ -122,6 +122,7 @@ VERBOSE=${YELLOW}
 TODO=${RED}
 
 export AWS_PAGER=$PAGER
+export AWS_DEFAULT_REGION=$REGION
 
 # Run the command unless in dummy mode, displaying it first if in debug mode
 function run() {
@@ -235,7 +236,7 @@ for t in $ROUTE_TABLES; do
     run aws ec2 describe-route-tables \
         $OUTPUT \
         --route-table-ids $t \
-        --query 'RouteTables[].{Associations:Associations[].{Subnet:SubnetId},Routes:Routes[?State== `active`].{Destination:DestinationCidrBlock,GateWay:GatewayId},Name:Tags[?Key == `Name`] | [0].Value}'
+        --query 'RouteTables[].{Associations:Associations[].{Subnet:SubnetId},Routes:Routes[?State== `active`].{Destination:DestinationCidrBlock,GateWay:GatewayId,NAT:NatGatewayId},Name:Tags[?Key == `Name`] | [0].Value}'
 done
 
 # NACLS
@@ -392,3 +393,37 @@ for in in $INSTANCES; do
         --query "Volumes[*].{Id:VolumeId,Encrypted:Encrypted,Size:Size,State:State,IOPS:Iops,Type:VolumeType}"
 done
 
+## EIPs
+echo ""
+echo "${HEADER}Elastic IPs:${NONE}"
+
+EIP_QUERY="Addresses[*].{Instance:InstanceId,PublicIp:PublicIp,PrivateIp:PrivateIpAddress,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
+
+run aws ec2 describe-addresses \
+    $VPC_FILTER \
+    $OUTPUT \
+    --query "$EIP_QUERY"
+
+# EBS Unattached Volumes
+# Not VPC specific
+echo ""
+echo "${HEADER}EBS Unattached Volumes:${NONE}"
+
+EBS_QUERY="Volumes[*].{AZ:AvailabilityZone,Encrypted:Encrypted,Size:Size,IOPS:Iops,Type:VolumeType,ID:VolumeId}"
+
+run aws ec2 describe-volumes \
+    --filter 'Name=status,Values=available' \
+    $OUTPUT \
+    --query "$EBS_QUERY"
+
+# Snapshots
+# Not VPC specific
+echo ""
+echo "${HEADER}Snapshots:${NONE}"
+
+SNAP_QUERY="Snapshots[*].{Encrypted:Encrypted,Size:VolumeSize,State:State,VolumeId:VolumeId,ID:SnapshotId,When:StartTime}"
+
+run aws ec2 describe-snapshots \
+    --owner-ids self \
+    $OUTPUT \
+    --query "$SNAP_QUERY"
