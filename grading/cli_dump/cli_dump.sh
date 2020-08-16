@@ -166,6 +166,8 @@ if [[ ! $? ]]; then
     exit 1
 fi
 
+ACCOUNT=$(aws sts get-caller-identity --query '{Account:Account}' --output text)
+
 # If VPC specified check it exists
 if $RUN; then
     if [[ ! -z "$VPC" ]]; then
@@ -301,6 +303,45 @@ run aws ec2 describe-key-pairs \
     $OUTPUT \
     --query 'KeyPairs[*].{ID:KeyPairId,Name:KeyName}'
 
+# Instances
+echo ""
+echo "${HEADER}Instances:${NONE}"
+
+run aws ec2 describe-instances \
+    $VPC_FILTER \
+    $OUTPUT \
+    --query "Reservations[*].Instances[*].{${VPC_QUERY}ID:InstanceId,AMI:ImageId,Type:InstanceType,AZ:Placement.AvailabilityZone,PrivateIP:PrivateIpAddress,Subnet:SubnetId,PublicIP:PublicIpAddress}"
+
+INSTANCES=$(list aws ec2 describe-instances $VPC_FILTER --output text --query 'Reservations[*].Instances[*].InstanceId')
+
+for in in $INSTANCES; do
+    echo ""
+    echo "${SUB}Instance $in:${NONE}"
+
+    run aws ec2 describe-instances \
+        --instance-ids $in \
+        $OUTPUT \
+        --query "Reservations[*].Instances[0].{BlockDevices:BlockDeviceMappings[*].{Device:DeviceName,Attached:Ebs.Status,Volume:Ebs.VolumeId},Network:NetworkInterfaces[*].{SecGroups:Groups[*].GroupId,IP:PrivateIpAddresses[*].{PublicIP:Association.PublicIp,PublicDNS:Association.PublicDnsName,PrivateIP:PrivateIpAddress,Primary:Primary},ID:NetworkInterfaceId}}"
+
+    echo ""
+    echo "${SUB}Volumes attached to instance $in:${NONE}"
+    run aws ec2 describe-volumes \
+        --filters Name=attachment.instance-id,Values=$in \
+        $OUTPUT \
+        --query "Volumes[*].{Id:VolumeId,Encrypted:Encrypted,Size:Size,State:State,IOPS:Iops,Type:VolumeType}"
+done
+
+# EIPs
+# Not VPC specific 
+echo ""
+echo "${HEADER}Elastic IPs:${NONE}"
+
+EIP_QUERY="Addresses[*].{Instance:InstanceId,PublicIp:PublicIp,PrivateIp:PrivateIpAddress,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
+
+run aws ec2 describe-addresses \
+    $OUTPUT \
+    --query "$EIP_QUERY"
+
 # Load Balancers
 echo ""
 echo "${HEADER}Load Balancers:${NONE}"
@@ -358,6 +399,7 @@ for lb in $ELBS; do
 done
 
 # Launch Configs
+# Not VPC specific
 echo ""
 echo "${HEADER}Launch Configs:${NONE}"
 
@@ -365,44 +407,15 @@ run aws autoscaling describe-launch-configurations \
     $OUTPUT \
     --query 'LaunchConfigurations[*].{Name:LaunchConfigurationName,AMI:ImageId,Key:KeyName,SecGroups:SecurityGroups,Type:InstanceType}'
 
-# Instances
+# RDS
 echo ""
-echo "${HEADER}Instances:${NONE}"
+echo "${HEADER}RDS:${NONE}"
 
-run aws ec2 describe-instances \
-    $VPC_FILTER \
+RDS_QUERY="DBInstances[*].{ID:DBInstanceIdentifier,Class:DBInstanceClass,Engine:Engine,Status:DBInstanceStatus,Endpoint:Endpoint,SecurityGroups:DBSecurityGroups[*].DBSecurityGroupName,Subnets:DBSubnetGroup.Subnets[*].{Subnet:SubnetIdentifier,AZ:SubnetAvailabilityZone.Name}}"
+
+run aws rds describe-db-instances \
     $OUTPUT \
-    --query "Reservations[*].Instances[*].{${VPC_QUERY}ID:InstanceId,AMI:ImageId,Type:InstanceType,AZ:Placement.AvailabilityZone,PrivateIP:PrivateIpAddress,Subnet:SubnetId,PublicIP:PublicIpAddress}"
-
-INSTANCES=$(list aws ec2 describe-instances $VPC_FILTER --output text --query 'Reservations[*].Instances[*].InstanceId')
-
-for in in $INSTANCES; do
-    echo ""
-    echo "${SUB}Instance $in:${NONE}"
-
-    run aws ec2 describe-instances \
-        --instance-ids $in \
-        $OUTPUT \
-        --query "Reservations[*].Instances[0].{BlockDevices:BlockDeviceMappings[*].{Device:DeviceName,Attached:Ebs.Status,Volume:Ebs.VolumeId},Network:NetworkInterfaces[*].{SecGroups:Groups[*].GroupId,IP:PrivateIpAddresses[*].{PublicIP:Association.PublicIp,PublicDNS:Association.PublicDnsName,PrivateIP:PrivateIpAddress,Primary:Primary},ID:NetworkInterfaceId}}"
-
-    echo ""
-    echo "${SUB}Volumes attached to instance $in:${NONE}"
-    run aws ec2 describe-volumes \
-        --filters Name=attachment.instance-id,Values=$in \
-        $OUTPUT \
-        --query "Volumes[*].{Id:VolumeId,Encrypted:Encrypted,Size:Size,State:State,IOPS:Iops,Type:VolumeType}"
-done
-
-## EIPs
-echo ""
-echo "${HEADER}Elastic IPs:${NONE}"
-
-EIP_QUERY="Addresses[*].{Instance:InstanceId,PublicIp:PublicIp,PrivateIp:PrivateIpAddress,Name:Tags[?Key == "'`Name`'"] | [0].Value}"
-
-run aws ec2 describe-addresses \
-    $VPC_FILTER \
-    $OUTPUT \
-    --query "$EIP_QUERY"
+    --query "$RDS_QUERY"
 
 # EBS Unattached Volumes
 # Not VPC specific
@@ -427,3 +440,26 @@ run aws ec2 describe-snapshots \
     --owner-ids self \
     $OUTPUT \
     --query "$SNAP_QUERY"
+
+# AMIs
+# Not VPC specific
+echo ""
+echo "${HEADER}AMIs:${NONE}"
+
+AMI_QUERY="Images[*].{ID:ImageId,Platform:PlatformDetails,State:State,Name:Name,Description:Description,Arch:Architecture,When:CreationDate}"
+
+run aws ec2 describe-images \
+    --owners $ACCOUNT \
+    $OUTPUT \
+    --query "$AMI_QUERY"
+
+# Cloudformation
+# Not VPC specific
+echo ""
+echo "${HEADER}Cloudformation:${NONE}"
+
+CFN_QUERY="Stacks[*].{Name:StackName,Status:StackStatus,When:CreationTime}"
+
+run aws cloudformation describe-stacks \
+    $OUTPUT \
+    --query "$CFN_QUERY"
