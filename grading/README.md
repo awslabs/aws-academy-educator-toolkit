@@ -4,7 +4,8 @@ The AWS Academy Educator Toolkit is developed to provide insight into student pr
 
 | Tool | Description |
 |--|--|
-| [awless_dump](./awless_dump) | Wrapper around awless to list common resources in an AWS account | 
+| [awless_dump](./awless_dump) | Wrapper around awless to list common resources in an AWS account |
+| [cli_dump](./cli_dump) | BASH script to collect common resources from AWS cli |
 | [sandbox_collection](./sandbox_collection) | PowerShell script to collect all common resources in an AWS Academy Sandbox Account |
 
 ## License Summary
