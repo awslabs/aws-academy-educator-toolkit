@@ -4,11 +4,18 @@ This demo uses a jupyter notebook running with [bash_kernel](https://pypi.org/pr
 
 ## Launching JupyterLab
 
-The simplest way to launch the notebook is navigate to _Amazon Sagemaker_ in the AWS Console and under Notebook select _Notebook instances_. Then select _Create notebook Instance_.
+The simplest way to launch the notebook is from _Amazon Sagemaker_.
 
-TODO: Describe fields
+- Navigate to _Amazon Sagemaker_ in the AWS Console and under Notebook select _Notebook instances_.
+- Select _Create notebook Instance_.
+- Give the notebook instance a name
+- Select either ml.t2_medium or ml.t3_medium for the instance type. This is in the free tier for the first 2 months after you start using Sagemaker.
+- Expand _Git repositories_
+- Select _Clone a public Git reposnitoty to this notebook instance only_
+- Enter `https://github.com/awslabs/aws-academy-educator-toolkit.git` as the repository
+- Press _Create notebook Instance_
 
-TODO: Clone this repo
+Once it is ready select _Open JupyterLab_
 
 ## Install bash_kernel
 
@@ -25,4 +32,4 @@ Navigate back to the launcher and wait for _Bash_ to appear as one of the kernel
 
 ## Open notebook and select kernel
 
-Navigate to the notebook in the file browser and double click to open the notebook. When prompted for the kernel select _Bash_.
+Navigate to the notebook in the file browser and double click to open the notebook. When prompted for the kernel select _Bash_. You are now ready to work through the notebook.
