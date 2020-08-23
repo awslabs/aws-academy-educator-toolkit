@@ -2,6 +2,16 @@
 
 This demo uses a jupyter notebook running with [bash_kernel](https://pypi.org/project/bash_kernel/) to introduce the AWS CLI.
 
+## Create an IAM Role for the notebook Instance
+
+To explore the AWS CLI you will need to give your notebook Instance more privileges.
+
+- Navigate to IAM in the AWS Console
+- Create a service role for SageMaker
+- Select the `AmazonSageMakerFullAccess` policy
+- Create your role
+- Add another policy that gives you more access, something like `PowerUserAccess` or `AmazonEC2FullAccess`.
+
 ## Launching JupyterLab
 
 The simplest way to launch the notebook is from _Amazon Sagemaker_.
@@ -10,6 +20,7 @@ The simplest way to launch the notebook is from _Amazon Sagemaker_.
 - Select _Create notebook Instance_.
 - Give the notebook instance a name
 - Select either ml.t2_medium or ml.t3_medium for the instance type. This is in the free tier for the first 2 months after you start using Sagemaker.
+- Select the role you created for the IAM role
 - Expand _Git repositories_
 - Select _Clone a public Git reposnitoty to this notebook instance only_
 - Enter `https://github.com/awslabs/aws-academy-educator-toolkit.git` as the repository
