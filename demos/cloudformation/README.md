@@ -2,7 +2,7 @@
 
 The goal is to gain confidence with writing your own templates from scratch.
 
-In this lab you incrementally create a cloudformation template to launch an EC2 instance in a public subnet. You will then make a number of additional improvements to the template, including a private subnet. 
+In this lab you incrementally create a cloudformation template to launch an EC2 instance in a public subnet. You will then make a number of additional improvements to the template, including a private subnet.
 
 ![network diagram](./cfn-lab.png)
 
@@ -184,7 +184,6 @@ If we plan to reuse this template whenever we want to create a network, we will 
 
 ***Replace the parameter section*** in your template with a parameter called `VpcCidr` to prompt for the VPC CIDR block, and set the default to `10.1.0.0/16`:
 
-
 ```yaml
 Parameters:
 
@@ -215,7 +214,7 @@ aws cloudformation update-stack \
 
 and you should see that your template has been replaced (as it has a new VPC ID) by a new VPC with the `10.0.0.0/16` CIDR block, as that was the default value. If you look in the CloudFormation console events for this template you will see it created the new VPC and then deleted the old one.
 
-You can read more about parameters here: <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html>. This document describes how we can perform input validation. 
+You can read more about parameters here: <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html>. This document describes how we can perform input validation.
 
 For example, lets try to create a VPC with a bogus CIDR range. ***Update your stack*** with:
 
@@ -349,7 +348,7 @@ For our next subnet we might use this CIDR range, picking the next range in the 
 
 See this document for more information about `!Cidr`: <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference-cidr.html>
 
-An alternative to `!Sub` for building strings is to use the `!Join` function, for example you could use this to generate the names for your subnets: 
+An alternative to `!Sub` for building strings is to use the `!Join` function, for example you could use this to generate the names for your subnets:
 
 ```yaml
       Tags:
@@ -378,7 +377,7 @@ _Q: Could we have created the public subnet prior to the public route table?_
 
 [Solution: solutions/07-template.yaml](./solutions/07-template.yaml)
 
-## Step 8 - Security Group
+## Step 8 - Add a security group
 
 Before we can create an instance in our subnet, we will need a security group with at least port 80 open so we can connect to it. A security group resource is described here <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-security-group.html>
 
@@ -390,7 +389,7 @@ Strangely, the SecurityGroup resource type in cloudformation includes properties
 
 [Solution: solutions/08-template.yaml](./solutions/08-template.yaml)
 
-## Step 9
+## Step 9 - More parameter types and working with userdata
 
 Have a look at the documentation for creating an EC2 instance: <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-instance.html>
 
@@ -443,7 +442,8 @@ Last but not least is the user data. You can provide a script using the follow s
 ```
 
 ***Add your web server resource*** to your stack.
-***Update your stack*** and specify your keyname if needed:
+
+***Update your stack*** and specify your `KeyName` parameter if different to the default:
 
 ```bash
 aws cloudformation update-stack \
@@ -468,42 +468,36 @@ _Q: The cloudformation template completes before the instance has finished start
 
 [Solution: solutions/09-template.yaml](./solutions/09-template.yaml)
 
-## Step 10
+## Step 10 - Add outputs to see important resource attributes
 
-At this point in the lab we often instruct students to look in the Vocareum lab details for the IP address of the instance, or look in the console. For resource attributes the template can explicitly output values that we need from the resources in the stack.
+At this point in a lab we often instruct students to look in the Vocareum lab details for the IP address of the instance, or look in the console. For resource attributes the template can explicitly output values that we need from the resources in the stack.
 
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/outputs-section-structure.html>
+See <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/outputs-section-structure.html>
 
 Output the instance IP address. For bonus points also output the URL for the web server running on the instance.
 
-[Solution](./solutions/10-template.yaml)
+***Update your stack***
+
+***Display the output values*** from your stack:
 
 ```bash
-$ aws cloudformation describe-stacks \
+aws cloudformation describe-stacks \
     --stack cfn-demo \
     --query 'Stacks[*].Outputs[*]' \
     --output table
-
----------------------------------------------------------------------
-|                          DescribeStacks                           |
-+-----------------------------+------------+------------------------+
-|         Description         | OutputKey  |      OutputValue       |
-+-----------------------------+------------+------------------------+
-|  Instance Public IP Address |  PublicIP  |  34.205.28.192         |
-|  Instance Web Site          |  WebSite   |  http://34.205.28.192  |
-+-----------------------------+------------+------------------------+
 ```
 
-## Step 11
+[Solution: solutions/10-template.yaml](./solutions/10-template.yaml)
 
-In Step 9 the instane type was hardcoded, but if we wanted to use different instance sizes depending on a parameter we can specify? A common way to do this is to add a map.
+## Step 11 - Add a table to map parameter values
 
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/mappings-section-structure.html>
+In Step 9 the instance type was hardcoded, but if we wanted to use different instance sizes depending on a parameter we can specify? A common way to do this is to add a map, see <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/mappings-section-structure.html>.
 
 A map allows us to hardcode a set of values but select the appropriate value based on the region we are in or a parameter the user sets.
 
-- Add a parameter that allows the user to select from `Micro`, `Small` and `Large`, with `Micro` as the default
-- Add a mapping for those values to different instance sizes
+***Add a parameter*** to your template that allows a user to select from `Micro`, `Small` and `Large`, with `Micro` as the default.
+
+***Add a mapping*** for those values to different instance sizes
 
 ```yaml
 Mappings:
@@ -517,17 +511,28 @@ Mappings:
       Type: m5.large
 ```
 
-Now instead of hard coding t2.micro, use `!FindinMap` to look up the type of instance based on the size parameter.
+Now instead of hard coding `t2.micro`, use `!FindinMap` to look up the type of instance based on the size parameter.
 
-[Solution](./solutions/11-template.yaml)
+***Update your stack***.
 
-If you get an error that there is nothing to update that means your change has worked, the map lookup resulted in the same size as the running instance, a `t2.micro`.
+If you get an error that there is nothing to update that means your change has still worked, the map lookup resulted in the same size as the running instance, a `t2.micro`.
 
-## Step 12
+***Try a different size***:
+
+```bash
+aws cloudformation update-stack \
+    --stack-name cfn-demo \
+    --template-body file://template.yaml \
+    --parameters ParameterKey=KeyName,ParameterValue=mykey,ParameterKey=Size,ParameterValue=Small
+```
+
+[Solution: solutions/11-template.yaml](./solutions/11-template.yaml)
+
+## Step 12 - Use conditions to determine what resources to create
 
 We have web access to the instance, but what about SSH? An access key was installed but we never added SSH to the security group. How can we specify the CIDR range that we want to permit for the SSH client, ideally this should not `0.0.0.0/0`, and how can we make SSH access optional?
 
-- Create a new parameter that takes the permitted CIDR range.
+***Create a new parameter*** that takes the permitted CIDR range for SSH access, but an empty string means no access:
 
 ```yaml
   SSHCidr:
@@ -536,35 +541,68 @@ We have web access to the instance, but what about SSH? An access key was instal
     Description: Leave empty for no SSH access, otherwise specify trusted CIDR
 ```
 
-- Create a condition so that if the CIDR range is empty, do not add SSH access to the instance
-  - <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/conditions-section-structure.html>
+Conditions can be used to select what resources to create based on parameters. See <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/conditions-section-structure.html>.
 
-[Solution](./solutions/12-template.yaml)
+```yaml
+Conditions:
 
-Update your template passing in your external IPv4 address and confirm you can ssh to the instance.
+# Allow SSH access to the instance
+
+  SSHAccess: !Not [ !Equals [ !Ref SSHCidr, "" ] ]
+```
+
+***Add new security group ingress rule*** using a parameter and condition:
+
+```yaml
+    Condition: SSHAccess
+```
+
+***Update your stack*** and confirm SSH access if enabled with a parameter:
 
 ```bash
+# Get my IP
+curl ifconfig.co
+
+# Substitute IP address
 aws cloudformation update-stack \
     --stack-name cfn-demo \
     --template-body file://template.yaml \
-    --parameters ParameterKey=KeyName,ParameterValue=vockey ParameterKey=SSHCidr,ParameterValue=<IP Address>
+    --parameters ParameterKey=KeyName,ParameterValue=mykey,ParameterKey=Size,ParameterValue=Small,ParameterKey=SSHCidr,ParameterValue=IP
 ```
 
-## Step 13
+[Solution: solutions/12-template.yaml](./solutions/12-template.yaml)
 
-There are now 5 parameters users can specify. As the list of parameters grow they can be harder for the user to understand. You can provide a `Description` with the parameters, but you can provide additional meta data to customer the layout of the parameters.
+## Step 13 - Use metadata to make parameters more intuitive
 
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cloudformation-interface.html>
+Go to CloudFormation in the console. All the updates to the stack have been on the command line but often we run a template from the console. There are now 5 parameters users can specify. As the list of parameters grow they can be harder for the user to understand.
 
-Create two `ParameterGroups` and `ParameterLabels` for the parameters in your template.
+In the console, select the `cfn-demo` template on the left, select `Update` and `Use current template`. Press `Next` and you will see how the parameters are currently presented.
 
-[Solution](./solutions/13-template.yaml)
+You can provide a `Description` with the parameters, but you can provide additional meta data to customer the layout of the parameters: <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cloudformation-interface.html>
 
-Because this step creates no new resources, complete the next step before testing these changes.
+***Create*** `ParameterGroups` and `ParameterLabels` in the `Metadata` section of the template for the parameters in your template. Here is a start:
 
-# Step 14
+```yaml
+Metadata:
 
-We create a simple VPC with just one public subnet, what about a private subnet? First think about the components you will need and what order you need to create these resources:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Network
+        Parameters:
+          - VpcCidr
+    ParameterLabels:
+      VpcCidr:
+        default: VPC CIDR Range
+```
+
+[Solution: solutions/13-template.yaml](./solutions/13-template.yaml)
+
+Because this step creates no new resources you will need to complete the next step before testing these changes.
+
+## Step 14 - Add private subnet to network
+
+We created a simple VPC with just one public subnet, what about a private subnet? First think about the components you will need and what order you need to create these resources:
 
 - Private Route Table
 - Private Route
@@ -576,13 +614,17 @@ The order of resources in the template does not influence the order in which the
 
 In defining these resources you will find you will need more resources, and you will also need to tell CloudFormation about a dependency because a resource (NAT Gateway) depends on the Internet Gateway being attached to the VPC, but there is no reference to the Internet Gateway Attachment in its properties. You will not encounter this race because your Internet Gateway is already in place, but if you were running this template from scratch, you would risk a random error on some runs.
 
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-dependson.html>
+See <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-dependson.html>
 
 For the private subnet, use `!Cidr` again but this time select a different range.
 
-[Solution](./solutions/14-template.yaml)
+***Add private subnet resources*** to template.
 
-## Step 15
+***Progressively update*** to quicky catch and identify any mistakes.
+
+[Solution: solutions/14-template.yaml](./solutions/14-template.yaml)
+
+## Step 15 - Use deletion policies to protect key resources/data
 
 It is scarily easy to destroy all the resources you just built, but **before you run this** how can we protect important resources from deletion?
 
@@ -593,16 +635,15 @@ aws cloudformation delete-stack --stack-name cfn-demo
 
 Lets add an EBS volume to the instance, but configure the volume to create a snapshot when the template deletes.
 
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-deletionpolicy.html>
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-ebs-volume.html>
+See <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-deletionpolicy.html> and <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-ebs-volume.html>
 
-For the size of the volume, extend the map so that different size instances get a different size volume attached. Can you attach the volume without rebuilding the instance?
+For the size of the volume, extend the map from Step 11 so that different size instances get a different size volume attached. Can you attach the volume without rebuilding the instance?
 
-[Solution](./solutions/15-template.yaml)
-
-Update your stack to add the volume to your instance.
+***Update your stack*** to add the volume to your instance.
 
 See <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/protect-stack-resources.html> for other ways you can protect resources from accidental deletion.
+
+[Solution: solutions/15-template.yaml](./solutions/15-template.yaml)
 
 ## Step 16
 
@@ -614,10 +655,10 @@ Note: At time of writing, the design does not support !Cidr so you may need to r
 
 If you want to keep going, you can try...
 
-- Use the help scripts to wait for the EC2 instance to finish startup
+- Use the helper scripts to wait for the EC2 instance to finish startup
   - <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-helper-scripts-reference.html>
 - Create public and private subnets across 2 or more availability zones
-- Split the template in a Master, Network and Application templates.
+- Split the template into a Base, Network and Application templates.
   - <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html#nested>
 - Use exports to reference values across stacks
 - Create an application load balancer, target group, autoscaling group and launch config to run multiple web servers
