@@ -8,17 +8,35 @@ In this lab you incrementally create a cloudformation template to launch an EC2 
 
 This lab may make a good addition to any of the associate-level courses when they are introducing CloudFormation to students. It is known to work in both AWS Academy Cloud Operations and AWS Academy Cloud Developing sandpits.
 
-## Prep
+## Environment
 
-If using Cloud9 it will be easier to update the cloudformation stack using the command line and pass the template in as a file. These commands are included below.
+The recommended environment for running this lab is in a Cloud9 instance in an AWS Academy sandpit lab:
 
-Alternatively you can copy your template file with each update to an S3 bucket and update from there using the console:
+- Start the sandpit lab
+- Start a Cloud9 instance
+- In the terminal clone this repository with `git clone https://github.com/awslabs/aws-academy-educator-toolkit.git`
+- Navigate to aws-academy-educator-toolkit/demos/cloudformation in the file browser
+- Navigate to the same location in the terminal with
+
+```bash
+cd aws-academy-educator-toolkit/demos/cloudformation
+```
+
+- If needed during the lab the solutions for each step are in the solutions directory
+- Use the aws cli commands to create and update your stack, only going to the console to track progress or investigate any issues
+
+If you would prefer to use the console and not cli to run cloudformation:
+
+- Create an S3 bucket
+- Copy your template to that bucket and use the CloudFormation console to update from that bucket:
 
 ```bash
 aws s3 cp template.yaml s3://<BUCKET>
 ```
 
 ## Step 1
+
+CloudFormation supports both JSON and YAML formats for templates, but it is much easier for humans to read and write YAML. You can find lots of tutorials on how to write YAML on the internet, the trick is indentation is critical, much like writing Python code.
 
 CloudFormation templates start with
 
@@ -27,13 +45,14 @@ CloudFormation templates start with
 - at least one resource
 - comments start with a `#`
 
-The obvious resource to create first is a VPC.
+An obvious choice for the first resource to create is a VPC since we can't create any other networking resources without one. CloudFormation documentation describes how to define every resource type CloudFormation supports, the VPC documentation is located at <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-vpc.html>.
 
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-vpc.html>
-- For the VPC we need to specify the type `AWS::EC2::VPC`
+From the documentation we can determine that:
+
+- For the VPC we need to specify the type `AWS::EC2::VPC`.
 - It has a number of parameters. If we look at the parameter descriptions, only the `CidrBlock` is mandatory.
 
-Create a file called `template.yaml` in cloud9 and copy and paste this text, making sure you remember to save:
+***Create a file*** called `template.yaml` in cloud9 and copy and paste this text, making sure you remember to save (CTRL-S or Command-S):
 
 ```yaml
 ---
@@ -60,12 +79,25 @@ Resources:
   VPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.0.0.0/16
+      CidrBlock: 10.1.0.0/16
 
 # Outputs:
 ```
 
-Create the stack in the console or with
+With this definition we are:
+
+- Naming our VPC within the template simply as `VPC`
+- We are defining the CIDR block as `10.1.0.0/16`
+- The VPC is indented from the `Resources:` label, the Type and Properties are indented from the name of the VPC, and the property `CidrBlock` is indented further than `Properties:`.
+- In this template we are not defining parameters or outputs, so we leave those as comments.
+
+Make sure your terminal is in the same directory as where you created your template file:
+
+```bash
+ls -l template.yaml
+```
+
+***Create the CloudFormation*** stack called `cfn-demo` with
 
 ```bash
 aws cloudformation create-stack \
@@ -77,20 +109,29 @@ _Q: How did cloudformation know which region to put the VPC?_
 
 ## Step 2
 
-If you look at the VPC you just created you can see it is missing a name. By tagging resources properly it helps us understand what they are for, who owns them, etc. We can also automatic tasks based on a resource's tag.
+Open the VPC console in another tab and look at the VPC you just created. You can see it is missing a name. By tagging resources properly it helps us understand what they are for, who owns them, etc. We can also automatic tasks based on a resource's tag.
 
-Go back to the VPC documentation and you can see it describes how to add tags, and using the stack name is good way to keep the name unique.
+Go back to the VPC documentation and you can see it describes how to add tags. The tags parameter takes a list of key/value pairs, and a list element begins with a `-` in YAML:
 
-To refer to the parameter in the resource definition, we are will use the `!Ref` intrinsic function
+```yaml
+      Tags:
+        - Key: KeyName1
+          Value: Value1
+        - Key: KeyName2
+          Value: Value2
+```
 
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference-ref.html>
+A good way to name things generated by CloudFormation is to use the name of the templatetac as stackk names need to be unique within your account and region. CloudFormation templates support parameters that users can pass in and there are a number of psuedo parameters that CloudFormation also provides. These are described at <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/pseudo-parameter-reference.html>.
 
-The stack name is a psuedo parameter that we can always access in our stack
+The stack name "AWS::StackName" is a psuedo parameter that we can always access in our stack. To refer to a parameter iwe are will use the `!Ref` intrinsic function like this:
 
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/pseudo-parameter-reference.html>
-    - `!Ref "AWS::StackName"`
+```yaml
+!Ref "AWS::StackName"
+```
 
-Update your template to this:
+Learn more about intrinsic functions here: <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference-ref.html>
+
+***Update your template*** to this:
 
 ```yaml
 ---
@@ -117,7 +158,7 @@ Resources:
   VPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.0.0.0/16
+      CidrBlock: 10.1.0.0/16
       Tags:
         - Key: Name
           Value: !Ref "AWS::StackName"
@@ -127,7 +168,7 @@ Resources:
 
 _Q: If we update the stack with a new tag, what will happen to the existing VPC?_
 
-Update your stack with the new template:
+***Update your stack*** with the new template:
 
 ```bash
 aws cloudformation update-stack \
@@ -135,15 +176,14 @@ aws cloudformation update-stack \
     --template-body file://template.yaml
 ```
 
-Confirm the VPC name has been updated.
+Confirm the VPC name has been updated in the console.
 
 ## Step 3
 
-If we plan to reuse this template whenever we want to create a network and an instance, we will need to be able to configure settings. To do this we use parameters.
+If we plan to reuse this template whenever we want to create a network, we will need to be able to configure some resource settings differently for each network. To do this we use parameters.
 
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html>
-- Add a parameter to your template for the VPC CidrBlock and make the default `10.0.0.0/16`. 
-- Optional: To help with input validation you can also specify `AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(1[6-9]|2[0-8]))$`
+***Replace the parameter section*** in your template with a parameter called `VpcCidr` to prompt for the VPC CIDR block, and set the default to `10.1.0.0/16`:
+
 
 ```yaml
 Parameters:
@@ -151,16 +191,59 @@ Parameters:
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
+```
+
+***Update the VPC resource*** to Use `!Ref` to refer to your parameter in the VPC resource:
+
+```yaml
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      Tags:
+        - Key: Name
+          Value: !Ref "AWS::StackName"
+```
+
+[Solution: solutions/03-template.yaml](./solutions/03-template.yaml)
+
+***Update the stack*** with your new template by running this in the terminal:
+
+```bash
+aws cloudformation update-stack \
+    --stack-name cfn-demo \
+    --template-body file://template.yaml
+```
+
+and you should see that your template has been replaced (as it has a new VPC ID) by a new VPC with the `10.0.0.0/16` CIDR block, as that was the default value. If you look in the CloudFormation console events for this template you will see it created the new VPC and then deleted the old one.
+
+You can read more about parameters here: <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html>. This document describes how we can perform input validation. 
+
+For example, lets try to create a VPC with a bogus CIDR range. ***Update your stack*** with:
+
+```bash
+aws cloudformation update-stack \
+    --stack-name cfn-demo \
+    --parameters ParameterKey=VpcCidr,ParameterValue=10.300.0.0/16 \
+    --template-body file://template.yaml
+```
+
+The command runs but if you look in the CloudFormation console you can see it has failed and will be rolling back the change. ***Add some input validation*** to the parameter in your template:
+
+```yaml
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(1[6-9]|2[0-8]))$
 ```
 
-Use `!Ref` again to refer to your parameter in the VPC resource.
+and ***update the stack*** again with:
 
-[Solution](./solutions/03-template.yaml)
+```bash
+aws cloudformation update-stack \
+    --stack-name cfn-demo \
+    --parameters ParameterKey=VpcCidr,ParameterValue=10.300.0.0/16 \
+    --template-body file://template.yaml
+```
 
-Update the stack with your new template, you should see no change. In fact if you do it in the console you might get an error because there is nothing to update.
-
-Regardless of how you update the stack, look at your stack in the console, pressing the `Update` button and `Use current template`.
+This time you get an immediate error from CloudFormation.
 
 ## Step 4
 
