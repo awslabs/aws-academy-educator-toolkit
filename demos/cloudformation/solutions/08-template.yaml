@@ -87,17 +87,17 @@ Resources:
 
 # Security Group
 
-  SecurityGroup:
+  WebSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Traffic to Web ALB
-      GroupName: !Sub "sgrp-${AWS::StackName}"
+      GroupDescription: Traffic to Web Server
+      GroupName: !Sub "web-sgrp-${AWS::StackName}"
       VpcId: !Ref VPC
 
   HTTPIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
-      GroupId: !GetAtt SecurityGroup.GroupId
+      GroupId: !GetAtt WebSecurityGroup.GroupId
       IpProtocol: tcp
       FromPort: 80
       ToPort: 80

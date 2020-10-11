@@ -344,7 +344,7 @@ The `!GetAtt` function will return a different attribute from a resource, see th
 For our next subnet we might use this CIDR range, picking the next range in the list:
 
 ```yaml
-  !Select [ 1, !Cidr [ !GetAtt VPC.CidrBlock, 20, 8 ]]
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt VPC.CidrBlock, 20, 8 ]]
 ```
 
 See this document for more information about `!Cidr`: <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference-cidr.html>
@@ -366,35 +366,33 @@ Because this is a public subnet, add the `MapPublicIpOnLaunch` property so EC2 i
 
 [Solution: solutions/06-template.yaml](./solutions/06-template.yaml)
 
-## Step 7
+## Step 7 - Subnet and Route Table Association
 
-What route table is your subnet associated with? The default route table, not your public route table. Associate the public route table we created with the public subnet.
+Q: What route table is your subnet associated with? A: The default route table, not your public route table.
 
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-subnet-route-table-assoc.html>
+Associate the public route table we created with the public subnet using this resource: <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-subnet-route-table-assoc.html>
 
-[Solution](./solutions/07-template.yaml)
-
-Update your stack.
+***Update your stack***.
 
 _Q: Could we have created the public subnet prior to the public route table?_
 
-## Step 8
+[Solution: solutions/07-template.yaml](./solutions/07-template.yaml)
 
-Before we can create an instance in our subnet, we will need a security group with at least port 80 open.
+## Step 8 - Security Group
 
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-security-group.html>
-  - SecurityGroup type in cloudformation includes properties for its name and description. You can also tag the security group.
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-security-group-ingress.html>
+Before we can create an instance in our subnet, we will need a security group with at least port 80 open so we can connect to it. A security group resource is described here <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-security-group.html>
 
-[Solution](./solutions/08-template.yaml)
+Strangely, the SecurityGroup resource type in cloudformation includes properties for its name and description. You can also tag the security group as well. The ingress and egress rules can be embedded in the security group definition, but it is easier to read to you use resources for each rule, as described here: <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-security-group-ingress.html>
 
-Update the stack and check the security group in the console.
+***Create a security group*** for your web server and ***update the stack***.
+
+***Add an ingress rule*** for port 80 from the internet to the security group, including a description of what this rule is for.
+
+[Solution: solutions/08-template.yaml](./solutions/08-template.yaml)
 
 ## Step 9
 
-Have a look at the documentation for creating an EC2 instance.
-
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-instance.html>
+Have a look at the documentation for creating an EC2 instance: <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-instance.html>
 
 There are a lot more properties here, but most are optional. The properties we need to worry about are:
 
@@ -409,68 +407,66 @@ There are a lot more properties here, but most are optional. The properties we n
 
 ```yaml
       SecurityGroupIds:
-        - !Ref SecurityGroup
+        - !Ref WebSecurityGroup
 ```
 
-For the `InstanceType` we can specify `t2.micro`, but it would be best if the AMI and Access Key were not hardcoded but specified as parameters. With the CPC CIDR we used a string, but for the AMI and Access key we can use different parameter types that help pre-fill the values.
+For the `InstanceType` we can hard code `t2.micro` for now.
 
-- <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types>
+It would be best if the AMI and Access Key were not hardcoded but specified as parameters as these will vary by region. With the VPC CIDR we used a string, but for the AMI and Access key we can use different parameter types that help pre-fill the values: <https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types>
 
-For the image ID we want to fetch the latest AMI ID for a particular image, so specify this path as the default:
+For the image ID we want to fetch the latest AMI ID for a particular image, in this case Amazon Linux 2, so specify this `/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2` path as the default. Also ask for the key pair as a parameter of type `AWS::EC2::KeyPair::KeyName` and specify a default key if known:
 
 ```yaml
   AMI:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
     Description: Parameter store path to AMI ID
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: vockey # Default key in Vocareum
 ```
 
-Last but not least is the user data. You can provide a script using the follow syntax, in this case to install and run a web server:
+Last but not least is the user data. You can provide a script using the follow syntax, in this case to install and run a web server. Note that the userdata needs to be Base64 encoded using another intrinsic function:
 
 ```yaml
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          # Install Apache Web Server and PHP
+          # Install Apache Web Server
           yum install -y httpd
           # Add a message to the web server
           echo "What are you doing Dave?" > /var/www/html/index.html
           # Turn on web server
-          chkconfig httpd on
-          service httpd start
+          systemctl start httpd
+          systemctl enable httpd
 ```
 
-Try to update your stack. In the console you should be prompted to select an access key that you already have in the account. If updating using the CLI you will get an error for this parameter has no value. Adjust the command line arguments so you pass in the access key name, if you are running in Vocaruem it will be `vockey`:
+***Add your web server resource*** to your stack.
+***Update your stack*** and specify your keyname if needed:
 
 ```bash
 aws cloudformation update-stack \
     --stack-name cfn-demo \
     --template-body file://template.yaml \
-    --parameters ParameterKey=KeyName,ParameterValue=vockey
+    --parameters ParameterKey=KeyName,ParameterValue=mykey
 ```
 
-[Solution](./solutions/09-template.yaml)
-
-Update your stack and watch the EC2 instance start in console.
-
-TODO: This time when updating the stack, lets watch the progress:
+***Watch the progress*** of your update:
 
 ```bash
-aws cloudformation update-stack \
-    --stack-name cfn-demo \
-    --template-body file://template.yaml
-
 watch -n 5 -d \
     aws cloudformation describe-stack-resources \
     --stack-name cfn-demo \
-    --query 'StackResources[*].[ResourceType,ResourceStatus]' \
+    --query 'StackResources[*].[LogicalResourceId,ResourceType,ResourceStatus]' \
     --output table
 ```
 
-This will update a table showing the state of the resources in the stack. Press `ctrl-c` when done.
-
+This will update a table showing the state of the resources in the stack. Press `ctrl-c` when all resources have been created or updated.
 
 _Q: The cloudformation template completes before the instance has finished starting. What if the next resource we create depends on the instance running?_
+
+[Solution: solutions/09-template.yaml](./solutions/09-template.yaml)
 
 ## Step 10
 
