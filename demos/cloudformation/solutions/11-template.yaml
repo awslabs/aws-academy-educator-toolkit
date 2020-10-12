@@ -21,6 +21,7 @@ Parameters:
 
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
+    Default: vockey # Default key in Vocareum
 
   Size:
     Type: String
@@ -111,17 +112,17 @@ Resources:
 
 # Security Group
 
-  SecurityGroup:
+  WebSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Traffic to Web ALB
-      GroupName: !Sub "sgrp-${AWS::StackName}"
+      GroupDescription: Traffic to Web Server
+      GroupName: !Sub "web-sgrp-${AWS::StackName}"
       VpcId: !Ref VPC
 
   HTTPIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
-      GroupId: !GetAtt SecurityGroup.GroupId
+      GroupId: !GetAtt WebSecurityGroup.GroupId
       IpProtocol: tcp
       FromPort: 80
       ToPort: 80
@@ -138,17 +139,17 @@ Resources:
       KeyName: !Ref KeyName
       SubnetId: !Ref PublicSubnet
       SecurityGroupIds:
-        - !Ref SecurityGroup
+        - !Ref WebSecurityGroup
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          # Install Apache Web Server and PHP
+          # Install Apache Web Server
           yum install -y httpd
           # Add a message to the web server
           echo "What are you doing Dave?" > /var/www/html/index.html
           # Turn on web server
-          chkconfig httpd on
-          service httpd start
+          systemctl start httpd
+          systemctl enable httpd
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-instance"
