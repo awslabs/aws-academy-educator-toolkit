@@ -9,8 +9,10 @@ NAT Gateways are an important component in most VPC networks providing private h
 ### Installation
 
 After the student has created their VPC, subnets and route tables, they can
-* Run this cloudformation template in that region specifying their network.
-Copy the elastic network interface (ENI) for the NAT instance is listed in the template output.
+* Run this cloudformation template in that region specifying their network paramters (defined below)
+  * Educate classroom: [chatz-natz-educate.yaml](./chatz-natz-educate.yaml)
+  * Other environments that support SSM parameter store: [chatz-natz.yaml](./chatz-natz.yaml)
+* Copy the elastic network interface (ENI) for the NAT instance is listed in the template output.
 * Update the private route table route to the internet to use the ENI listed in the template.
 
 ### Parameters
@@ -19,10 +21,15 @@ The cloudformation template requires
 
 * The VPC ID
 * The public subnet for the NAT instance
-* The CIDR range of private subnets or the CIDR range of the VPC (default 10.0.0.0/16)
-* The EC2 instance type for the NAT instance (default t2.micro)
-* Which linux interface to configure for IP masquerading (default eth0)
+* The CIDR range of private subnets or the CIDR range of the VPC
+  * Default is the whole VPC with 10.0.0.0/16
+* The EC2 instance type for the NAT instance
+  * Default is t2.micro
+* Which linux interface to configure for IP masquerading
+  * Default is eth0
 * Which Amazon Linux 2 AMI to use
+  * If using the educate template you will need to get this AMI ID from the EC2 console by starting to launch an instance
+  * The other template will automatically fetch the AMI ID from the SSM parameter store so this parameter can be left unchanged
 
 ### Stopping and Starting the NAT instance
 

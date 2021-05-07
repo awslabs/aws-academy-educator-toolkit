@@ -1,0 +1,168 @@
+---
+AWSTemplateFormatVersion: "2010-09-09" 
+
+Description: 
+  Chatz-Natz - Deploy a NAT instance, including security group and network interface.
+  Configure private route for the internet to the instance network interface.
+  The NAT instance can be stopped and started without changing the route table.
+  By David "Chatz" Chatterton (dcchatte@amazon.com).
+
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Metadata: 
+
+  AWS::CloudFormation::Interface: 
+    ParameterGroups:
+      - Label:
+          default: Network
+        Parameters:
+          - VPC 
+          - PublicSubnet
+          - PrivateCIDR
+      - Label:
+          default: Instance
+        Parameters:
+          - InstanceType
+          - Interface
+          - AmazonLinux2AMIID
+          # - KeyName
+    ParameterLabels:
+      VPC:
+        default: VPC
+      PublicSubnet:
+        default: Public Subnet
+      PrivateCIDR:
+        default: Private Subnet CIDR
+      InstanceType:
+        default: Instance Type
+      AmazonLinux2AMIID:
+        default: AMI
+      Interface:
+        default: Network Interface
+      # KeyName:
+      #   default: Key Pair
+
+Parameters:
+
+  InstanceType:
+    Type: String
+    Default: t2.micro
+
+  AmazonLinux2AMIID:
+    Type: AWS::EC2::Image::Id
+    Description: Amazon Linux 2 AMI ID
+
+  VPC:
+    Type: AWS::EC2::VPC::Id
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet::Id
+    Description: Public subnet for the NAT instance
+
+  PrivateCIDR:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR for private subnets, or for the whole VPC, used in the NAT security group
+
+  Interface:
+    Type: String
+    Default: 'eth0'
+    Description: Name of primary network interface, may vary for different instance types
+
+  # KeyName:
+  #   Type: AWS::EC2::KeyPair::KeyName
+
+Resources:
+
+  NatSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "NAT sgrp in ${PublicSubnet}"
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: !Ref PrivateCIDR
+      - IpProtocol: tcp
+        FromPort: 433
+        ToPort: 433
+        CidrIp: !Ref PrivateCIDR
+      - IpProtocol: icmp
+        FromPort: 8
+        ToPort: -1
+        CidrIp: !Ref PrivateCIDR  
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}'
+
+  NatENI:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}'
+      Description: 'Configure private route to this interface for internet traffic from private subnets'
+      SourceDestCheck: false
+      GroupSet:
+        - !Ref NatSecurityGroup
+      SubnetId: !Ref PublicSubnet
+
+  NAT:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref AmazonLinux2AMIID
+      # KeyName: !Ref KeyName
+      SourceDestCheck: false
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          echo 1 > /proc/sys/net/ipv4/ip_forward
+          echo "net.ipv4.ip_forward = 1" > /etc/sysctl.d/99-chatz-natz.conf
+          echo > /etc/systemd/system/chatz-natz.service '
+          # SPDX-License-Identifier: MIT
+          [Unit]
+          Description=Configure iptables for NAT
+          After=network.target
+          [Service]
+          Type=simple
+          ExecStart=/sbin/iptables -t nat -A POSTROUTING -o ${Interface} -j MASQUERADE
+          [Install]
+          WantedBy=multi-user.target' 
+          systemctl daemon-reload
+          systemctl enable chatz-natz
+          systemctl start chatz-natz
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}'
+        - Key: Description
+          Value: 'Configure private route to use network interface attached to this instance'
+      NetworkInterfaces:
+        - NetworkInterfaceId: !Ref NatENI
+          DeviceIndex: '0'
+
+Outputs:
+
+  NatTarget:
+    Description: NAT target for private route table
+    Value: !Ref NatENI
